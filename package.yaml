@@ -1,0 +1,12 @@
+name:                benign
+version:             1.0.0.0
+author:              Arnaud Spiwack
+maintainer:          arnaud@spiwack.net
+copyright:           "MIT"
+
+dependencies:
+  - base
+  - containers
+
+library:
+  source-dirs: src
