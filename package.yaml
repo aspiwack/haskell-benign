@@ -6,6 +6,7 @@ copyright:           "MIT"
 
 dependencies:
   - base
+  - async
   - containers
   - stm
 

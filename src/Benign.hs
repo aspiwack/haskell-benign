@@ -2,17 +2,26 @@
 {-# LANGUAGE GHC2021 #-}
 {-# LANGUAGE RoleAnnotations #-}
 
-module Benign (Field) where
+module Benign
+  ( Field,
+    newField,
+  )
+where
 
 import Control.Concurrent
+import Control.Concurrent.Async (async)
+import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.STM.TVar
+import Control.Exception (evaluate, finally)
 import Control.Monad.STM
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Unique (Unique)
 import Data.Unique qualified as Unique
 import GHC.Exts (Any)
+import GHC.Stack (HasCallStack)
 import System.IO.Unsafe
 import Unsafe.Coerce
 
@@ -29,8 +38,14 @@ type Vault = Map Unique Any
 lookupVault :: Field a -> Vault -> Maybe a
 lookupVault (MkField id) = unsafeCoerce $ Map.lookup id
 
+alterVault :: (Maybe a -> Maybe a) -> Field a -> Vault -> Vault
+alterVault f (MkField id) = Map.alter (unsafeCoerce f) id
+
 insertVault :: Field a -> a -> Vault -> Vault
 insertVault (MkField id) a = unsafeCoerce $ Map.insert id a
+
+deleteVault :: Field a -> Vault -> Vault
+deleteVault (MkField id) = Map.delete id
 
 type LocalStates = Map ThreadId Vault
 
@@ -62,3 +77,29 @@ setLocalState :: Vault -> IO ()
 setLocalState vault = do
   tid <- myThreadId
   atomically $ modifyTVar' localStates $ Map.insert tid vault
+
+get :: Field a -> Maybe a
+get f = unsafePerformIO $ lookupInLocalState f
+{-# NOINLINE get #-}
+
+get' :: HasCallStack => Field a -> a
+get' f = case get f of
+  Just a -> a
+  Nothing -> error "Trying to retrieve an absent field"
+
+-- It would be nice if fields had a name that we could use here to display
+-- more helpful error messages.
+
+getWithDefault :: a -> Field a -> a
+getWithDefault deflt = fromMaybe deflt . get
+
+withAltering :: Field a -> (Maybe a -> Maybe a) -> b -> b
+withAltering f g thing = unsafePerformIO $ do
+  outer_vault <- myLocalState
+  inner_vault <- evaluate $ alterVault g f outer_vault
+  me <- async $ do
+    setLocalState inner_vault
+    evaluate thing
+  Async.wait me
+    `finally` atomically (modifyTVar' localStates (Map.delete (Async.asyncThreadId me)))
+{-# NOINLINE withAltering #-}
