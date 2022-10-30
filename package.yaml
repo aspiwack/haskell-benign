@@ -7,6 +7,7 @@ copyright:           "MIT"
 dependencies:
   - base
   - containers
+  - stm
 
 library:
   source-dirs: src
