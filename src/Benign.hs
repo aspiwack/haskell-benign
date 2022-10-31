@@ -30,6 +30,10 @@ module Benign
     get',
     getWithDefault,
     unsafeSpanBenign,
+    Eval,
+    Seq,
+    SeqIsEval,
+    NF,
   )
 where
 
