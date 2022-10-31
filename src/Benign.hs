@@ -4,6 +4,24 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
+-- | Benign effects are actions which are nominally effects but really doesn't
+-- affect the semantics of your programs such as logging and tracing. Such
+-- effects can be run in pure code.
+--
+-- Laziness doesn't always make it easy to add benign effects. Running a pure
+-- lazy expression has a beginning (when the thunk is being evaluated) but no
+-- real end. For tracing, for instance, you need to mark the end of
+-- evaluation.
+--
+-- This library uses the 'Eval' type class to add a (programmable)
+-- end to expressions. If you have a function `span "begin" "end"` to log
+-- strings before and after an expression, you could write
+--
+-- > span "begin" "end" $ Seq $ u`
+--
+-- To mean that `"end"` is logged after calling `seq u` (evaluating `u` in weak
+-- head normal form). `Seq` is called an /evaluation strategy/ for the purpose
+-- of this module. Evaluation strategies are all given as data type wrapper.
 module Benign
   ( Field,
     newField,
@@ -101,6 +119,14 @@ withAltering f g thing = unsafePerformIO $ do
 -- this property.
 {-# NOINLINE withAltering #-}
 
+-- | @'unsafeSpanBenign' before after thing@ runs the `before` action before
+-- evaluating `thing`, then runs the `after` action.
+--
+-- 'unsafeSpanBenign' is not typically used directly in programs, but used to
+-- write safe benign-effect-spanning functions.
+--
+-- To call 'unsafeSpanBenign' safely, make sure that the `before` and `after`
+-- actions are benign.
 unsafeSpanBenign ::
   Eval a =>
   -- | Action to run before evaluation
@@ -128,7 +154,7 @@ class Eval a where
 
   extractEval :: Thunk a -> Result a
 
--- | Evaluation `a` by simply calling `seq` on it.
+-- | Evaluation strategy: evaluates `a` by simply calling `seq` on it.
 newtype Seq a = Seq a
 
 instance SeqIsEval a => Eval (Seq a) where
@@ -156,6 +182,11 @@ instance SeqIsEval Word64
 
 instance SeqIsEval Char
 
+-- | Evaluation strategy: evaluates `a` in normal form (see "Control.Deepseq").
+--
+-- This is a pretty blunt strategy, as it necessarily traverse the result type,
+-- even if it's already in normal form. As a consequence it's not recommended to
+-- use this lightly.
 newtype NF a = NF a
 
 instance NFData a => Eval (NF a) where
