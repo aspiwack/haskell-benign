@@ -26,6 +26,7 @@ module Benign
   ( Field,
     newField,
     withAltering,
+    withSetting,
     lookupLocalState,
     lookupLocalState',
     lookupLocalStateWithDefault,
@@ -165,6 +166,13 @@ withAltering f g thing = unsafePerformIO $ do
   Async.wait me
     `finally` atomically (modifyTVar' localStates (Map.delete (Async.asyncThreadId me)))
 {-# NOINLINE withAltering #-}
+
+-- | @'withSetting f a thing@ evaluates 'thing' with the local state's field `f`
+-- set to `a`.
+--
+-- See 'withAltering' for more explanations.
+withSetting :: Eval b => Field a -> a -> b -> Result b
+withSetting f a = withAltering f (\_ -> Just a)
 
 -- | @'unsafeSpanBenign' before after thing@ runs the `before` action before
 -- evaluating `thing`, then runs the `after` action.
