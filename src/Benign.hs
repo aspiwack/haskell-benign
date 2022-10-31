@@ -30,10 +30,10 @@ module Benign
     lookupLocalState',
     lookupLocalStateWithDefault,
     unsafeSpanBenign,
-    Eval(..),
-    Seq(..),
+    Eval (..),
+    Seq (..),
     SeqIsEval,
-    NF(..),
+    NF (..),
   )
 where
 
@@ -91,13 +91,12 @@ lookupLocalState f = lookupVault f <$> myLocalState
 lookupLocalState' :: HasCallStack => Field a -> IO a
 lookupLocalState' f = fromMaybe errmsg <$> lookupLocalState f
   where
--- It would be nice if fields had a name that we could use here to display
--- more helpful error messages.
+    -- It would be nice if fields had a name that we could use here to display
+    -- more helpful error messages.
     errmsg = error "Trying to retrieve an absent field"
 
 lookupLocalStateWithDefault :: a -> Field a -> IO a
 lookupLocalStateWithDefault deflt f = fromMaybe deflt <$> lookupLocalState f
-
 
 setLocalState :: Vault -> IO ()
 setLocalState vault = do
