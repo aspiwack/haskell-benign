@@ -14,10 +14,10 @@
 -- evaluation.
 --
 -- This library uses the 'Eval' type class to add a (programmable)
--- end to expressions. If you have a function `span "begin" "end"` to log
+-- end to expressions. If you have a function @span "begin" "end"@ to log
 -- strings before and after an expression, you could write
 --
--- > span "begin" "end" $ Seq $ u`
+-- > span "begin" "end" $ Seq $ u
 --
 -- To mean that `"end"` is logged after calling `seq u` (evaluating `u` in weak
 -- head normal form). `Seq` is called an /evaluation strategy/ for the purpose
@@ -26,14 +26,14 @@ module Benign
   ( Field,
     newField,
     withAltering,
-    get,
-    get',
-    getWithDefault,
+    lookupLocalState,
+    lookupLocalState',
+    lookupLocalStateWithDefault,
     unsafeSpanBenign,
-    Eval,
-    Seq,
+    Eval(..),
+    Seq(..),
     SeqIsEval,
-    NF,
+    NF(..),
   )
 where
 
@@ -85,28 +85,24 @@ myLocalState = do
     currentStates <- readTVar localStates
     return $ Map.findWithDefault Map.empty tid currentStates
 
-lookupInLocalState :: Field a -> IO (Maybe a)
-lookupInLocalState f = lookupVault f <$> myLocalState
+lookupLocalState :: Field a -> IO (Maybe a)
+lookupLocalState f = lookupVault f <$> myLocalState
+
+lookupLocalState' :: HasCallStack => Field a -> IO a
+lookupLocalState' f = fromMaybe errmsg <$> lookupLocalState f
+  where
+-- It would be nice if fields had a name that we could use here to display
+-- more helpful error messages.
+    errmsg = error "Trying to retrieve an absent field"
+
+lookupLocalStateWithDefault :: a -> Field a -> IO a
+lookupLocalStateWithDefault deflt f = fromMaybe deflt <$> lookupLocalState f
+
 
 setLocalState :: Vault -> IO ()
 setLocalState vault = do
   tid <- myThreadId
   atomically $ modifyTVar' localStates $ Map.insert tid vault
-
-get :: Field a -> Maybe a
-get f = unsafePerformIO $ lookupInLocalState f
-{-# NOINLINE get #-}
-
-get' :: HasCallStack => Field a -> a
-get' f = case get f of
-  Just a -> a
-  Nothing -> error "Trying to retrieve an absent field"
-
--- It would be nice if fields had a name that we could use here to display
--- more helpful error messages.
-
-getWithDefault :: a -> Field a -> a
-getWithDefault deflt = fromMaybe deflt . get
 
 withAltering :: Eval b => Field a -> (Maybe a -> Maybe a) -> b -> Result b
 withAltering f g thing = unsafePerformIO $ do
@@ -130,7 +126,7 @@ withAltering f g thing = unsafePerformIO $ do
 -- write safe benign-effect-spanning functions.
 --
 -- To call 'unsafeSpanBenign' safely, make sure that the `before` and `after`
--- actions are benign.
+-- actions are indeed benign.
 unsafeSpanBenign ::
   Eval a =>
   -- | Action to run before evaluation
@@ -168,7 +164,7 @@ instance SeqIsEval a => Eval (Seq a) where
   extractEval (SeqThunk x) = x
 
 -- | Qualifies type where `seq` evaluates sufficiently. This is a fail-safe to
--- avoid using the `'Seq'` strategy by mistake. /E.g./ `'Seq' []` is unlikely to
+-- avoid using the 'Seq' strategy by mistake. /E.g./ @'Seq' []@ is unlikely to
 -- be intended.
 class SeqIsEval a
 
@@ -186,7 +182,8 @@ instance SeqIsEval Word64
 
 instance SeqIsEval Char
 
--- | Evaluation strategy: evaluates `a` in normal form (see "Control.Deepseq").
+-- | Evaluation strategy: evaluates `a` in normal form (see the `deepseq`
+-- package).
 --
 -- This is a pretty blunt strategy, as it necessarily traverse the result type,
 -- even if it's already in normal form. As a consequence it's not recommended to
