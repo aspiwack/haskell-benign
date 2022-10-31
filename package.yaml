@@ -9,6 +9,7 @@ dependencies:
   - base
   - async
   - containers
+  - deepseq
   - stm
 
 library:
