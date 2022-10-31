@@ -74,6 +74,19 @@ alterVault f (MkField u) = Map.alter (unsafeCoerce f) u
 
 type LocalStates = Map ThreadId Vault
 
+-- Implementation note: the `Vault` is immutable data, because `localStates` is
+-- a lexical state rather than a global state: the state is modified within a
+-- scope, like in `Reader`'s `local`, rather than globally, like in `State`'s
+-- `put`. It's easier to implement the local aspect with immutable data
+-- (otherwise what would happen if, say, two threads run in parallel?)
+--
+-- The outer Map (from `TId` to `Vault`) is a global state, and need not be a
+-- `Map`. But it was easier for now. But it may be worth it in the future to
+-- make an implementation that has “one TVar per thread” (whatever this actually
+-- means) to avoid contention of the outer `TVar`. To design this, it's worth
+-- keeping in mind, though, that the value associated with a thread is never
+-- modified: only set (once) then deleted. So this is what the structure would
+-- have to recognise is non-interfering for STM actions.
 localStates :: TVar LocalStates
 localStates = unsafePerformIO $ newTVarIO Map.empty
 {-# NOINLINE localStates #-}
