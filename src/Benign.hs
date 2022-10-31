@@ -5,6 +5,10 @@
 module Benign
   ( Field,
     newField,
+    withAltering,
+    get,
+    get',
+    getWithDefault,
   )
 where
 
@@ -14,7 +18,6 @@ import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.STM.TVar
 import Control.Exception (evaluate, finally)
 import Control.Monad.STM
-import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
@@ -36,32 +39,16 @@ newField = MkField <$> Unique.newUnique
 type Vault = Map Unique Any
 
 lookupVault :: Field a -> Vault -> Maybe a
-lookupVault (MkField id) = unsafeCoerce $ Map.lookup id
+lookupVault (MkField u) = unsafeCoerce $ Map.lookup u
 
 alterVault :: (Maybe a -> Maybe a) -> Field a -> Vault -> Vault
-alterVault f (MkField id) = Map.alter (unsafeCoerce f) id
-
-insertVault :: Field a -> a -> Vault -> Vault
-insertVault (MkField id) a = unsafeCoerce $ Map.insert id a
-
-deleteVault :: Field a -> Vault -> Vault
-deleteVault (MkField id) = Map.delete id
+alterVault f (MkField u) = Map.alter (unsafeCoerce f) u
 
 type LocalStates = Map ThreadId Vault
 
 localStates :: TVar LocalStates
 localStates = unsafePerformIO $ newTVarIO Map.empty
 {-# NOINLINE localStates #-}
-
--- modifyLocalState :: (Vault -> Vault) -> STM ()
--- modifyLocalState f = modifyTVar' (Map.alter f' id) localStates
---   where
---     f' = Map.alter
-
--- insertInLocalState :: Field a -> a -> IO ()
--- insertInLocalState f a = do
---   tid <- myThreadId
---   atomically $ modifyLocalState (insertVault )
 
 myLocalState :: IO Vault
 myLocalState = do

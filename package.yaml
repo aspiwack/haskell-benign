@@ -2,6 +2,7 @@ name:                benign
 version:             1.0.0.0
 author:              Arnaud Spiwack
 maintainer:          arnaud@spiwack.net
+github: aspiwack/haskell-benign
 copyright:           "MIT"
 
 dependencies:
@@ -12,3 +13,8 @@ dependencies:
 
 library:
   source-dirs: src
+
+ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wnoncanonical-monad-instances -Wredundant-constraints
+
+# For executables:
+# -threaded -rtsopts -with-rtsopts=-N
