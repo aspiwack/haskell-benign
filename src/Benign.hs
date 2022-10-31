@@ -111,11 +111,11 @@ withAltering f g thing = unsafePerformIO $ do
     setLocalState inner_vault
     thunk <- evaluate $ eval thing
     return $ extractEval thunk
+  -- Note: this implementation relies of the fact that thread ids can't be
+  -- reused, otherwise there may be races. I'm not sure that GHC guarantees
+  -- this property.
   Async.wait me
     `finally` atomically (modifyTVar' localStates (Map.delete (Async.asyncThreadId me)))
--- Note: this implementation relies of the fact that thread ids can't be
--- reused, otherwise there may be races. I'm not sure that GHC guarantees
--- this property.
 {-# NOINLINE withAltering #-}
 
 -- | @'unsafeSpanBenign' before after thing@ runs the `before` action before
