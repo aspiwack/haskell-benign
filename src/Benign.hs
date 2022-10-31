@@ -116,6 +116,41 @@ setLocalState vault = do
   tid <- myThreadId
   atomically $ modifyTVar' localStates $ Map.insert tid vault
 
+-- | @'withAltering' f g thing@ evaluates 'thing' with the local state's field
+-- `f` set by `g` in the style of 'Map.alter'.
+--
+-- Why do we need this? If we are to do some logging in pure code, we still need
+-- to know /where/ to log too. That is we need configuration. It is out of
+-- question to modify all the pure code to take the configuration as arguments
+-- (either explicit, implicit, or with a monad): this would force us to pass
+-- arguments down all the functions that call functions that ultimately call a
+-- logging function. It would be majorly inconvenient, but mostly it goes
+-- against the fact that the code is pure. If we go this way, we may as well
+-- write all the code in monadic style. It is an assumption of this library that
+-- we don't want to do this (and it seems to be supported by experience that
+-- most Haskell programmers don't want to write most of their code in a monad).
+--
+-- So we need a way to pass some state to pure code, to be used in benign
+-- effects (see 'lookupLocalState' and 'unsafeSpanBenign'). This is what
+-- 'withAltering' (and friends) achieves.
+--
+-- Another example of state which makes it especially obvious that we want a
+-- lexical state (à la `Reader` monad) rather that a global state (à la `State`
+-- monad): some logging frameworks, such as Katip, let you add some context to
+-- logging strings. This context, of course, is lexical (you don't modify the
+-- logging context in another thread to reflect what's going on in your thread).
+--
+-- At any rate, since 'withAltering' is exposed as a pure function, it wouldn't
+-- make much sense to modify a global state. The modification could happen at
+-- any time and in any order. The result would be quite ill-defined.
+--
+-- The reason why we need the 'Eval' constraint is that, as a direct consequence
+-- of the design, the lexical state is passed dynamically to `thing`. That is,
+-- the state that is seen by a piece of code depends on where it's executed: if
+-- a lazy thunk escapes 'withAltering', then it's going to be picking up a
+-- different state. 'Eval' lets us be deliberate about what escapes and what
+-- doesn't. Namely the altered state is available precisely during the
+-- evaluation of `eval thing`.
 withAltering :: Eval b => Field a -> (Maybe a -> Maybe a) -> b -> Result b
 withAltering f g thing = unsafePerformIO $ do
   outer_vault <- myLocalState
