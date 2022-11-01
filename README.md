@@ -50,7 +50,10 @@ Build as
 $ stack build
 ```
 
-The formatter is Ormolu 0.5.0.1.
+The formatter is Ormolu 0.5.0.1. Format with
+```shell
+$ just format
+```
 
 You can use Nix (specifically `nix-shell`) to provide all the
 necessary dependencies (including a compatible Haskell Language

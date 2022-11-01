@@ -22,7 +22,7 @@ jobs:
     - name: Build Nix dependencies
       run: nix-shell --pure --run "echo '=== Nix dependencies installed ==='"
     - name: Check formatting
-      run: nix-shell --pure --run 'ormolu -m check $(find . -type f -name "*.hs-boot" -o -name "*.hs")'
+      run: nix-shell --pure --run 'just format check'
 
   test:
     name: stack build

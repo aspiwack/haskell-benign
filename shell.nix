@@ -33,6 +33,10 @@ pkgs.mkShell {
     pkgs.haskell.packages.ghc924.ormolu
     # Nix for recursive calls within Stack (necessary for pure shells)
     pkgs.nix
+    # Just lets us distribute project-wide commands
+    pkgs.just
+    # Git is used to call `git ls-files` for formatting
+    pkgs.git
   ];
 
   # Configure the Nix path to our own `pkgs`, to ensure Stack-with-Nix uses the correct one rather than the global <nixpkgs> when looking for the right `ghc` argument to pass in `nix/stack-integration.nix`
