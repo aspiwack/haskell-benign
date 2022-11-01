@@ -2,6 +2,9 @@
 
 A library for benign effects in Haskell
 
+_The current state is a proof of concept, it is not meant to be used
+in actual projects nor do I guarantee any stability yet_
+
 ## Philosophy
 
 A core tenet of Haskell programming is “pure core, imperative
@@ -67,4 +70,13 @@ machine) prior to building the Nix shell.
 
 ```shell
 $ cachix use aspiwack
-``
+```
+
+## Acknowledgement
+
+Credits go to
+- Alexis King for helping me come up with the implementation strategy
+  based on `async` and thread ids.
+- Thomas Bagrel for suggesting (in another context) the phrase
+  “lexical state” to me. I don't know whether the phrase has been used
+  before, a quick googling didn't turn up anything.
