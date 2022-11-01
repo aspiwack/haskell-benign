@@ -56,6 +56,7 @@ import GHC.Exts (Any)
 import GHC.Stack (HasCallStack)
 import System.IO.Unsafe
 import Unsafe.Coerce
+import Data.Strict.Wrapper
 
 newtype Field a = MkField Unique
   deriving newtype (Eq, Ord)
@@ -239,13 +240,30 @@ instance SeqIsEval Int32
 
 instance SeqIsEval Int64
 
+instance SeqIsEval Integer
+
 instance SeqIsEval Word
 
 instance SeqIsEval Word32
 
 instance SeqIsEval Word64
 
+instance SeqIsEval Float
+instance SeqIsEval Double
+
 instance SeqIsEval Char
+
+instance SeqIsEval Bool
+
+instance SeqIsEval Ordering
+
+instance SeqIsEval ()
+
+instance SeqIsEval a => SeqIsEval (Strict (Maybe a))
+instance (SeqIsEval a, SeqIsEval b) => SeqIsEval (Strict (Either a b))
+instance (SeqIsEval a, SeqIsEval b) => SeqIsEval (Strict (a, b))
+instance (SeqIsEval a, SeqIsEval b, SeqIsEval c) => SeqIsEval (Strict (a, b, c))
+instance (SeqIsEval a, SeqIsEval b, SeqIsEval c, SeqIsEval d) => SeqIsEval (Strict (a, b, c, d))
 
 -- | Evaluation strategy: evaluates `a` in normal form (see the `deepseq`
 -- package).

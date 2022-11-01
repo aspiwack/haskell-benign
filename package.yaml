@@ -11,6 +11,7 @@ dependencies:
   - containers
   - deepseq
   - stm
+  - strict-wrapper
 
 library:
   source-dirs: src
