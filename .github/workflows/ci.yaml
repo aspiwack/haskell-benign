@@ -1,0 +1,39 @@
+name: Continuous integration
+on: [push, pull_request]
+env:
+  # Bump this number to invalidate the Github-actions cache
+  cache-invalidation-key: 0
+  nixpkgs-url: https://github.com/NixOS/nixpkgs/archive/7f9be6a505a31f88499c5d20d11f98accf5ae6ba.tar.gz
+
+jobs:
+  ormolu:
+    name: check formatting with ormolu
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: cachix/install-nix-action@v15
+      with:
+        nix_path: "${{ env.nixpkgs-url }}"
+    - name: Build Nix dependencies
+      run: nix-shell --pure --run "echo '=== Nix dependencies installed ==='"
+    - name: Check formatting
+      run: nix-shell --pure --run 'ormolu -m check $(find . -type f -name "*.hs-boot" -o -name "*.hs")'
+
+  test:
+    name: stack build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: cachix/install-nix-action@v15
+      with:
+        nix_path: "${{ env.nixpkgs-url }}"
+    - name: Cache Stack dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.stack
+        key: stack-deps-${{ runner.os }}-${{ hashFiles('nix/sources.json') }}-v${{ env.cache-invalidation-key }}-${{ hashFiles('stack.yaml.lock', 'benign.cabal') }}-${{ github.sha }}
+        restore-keys: stack-deps-${{ runner.os }}-${{ hashFiles('nix/sources.json') }}-v${{ env.cache-invalidation-key }}-${{ hashFiles('stack.yaml.lock', 'benign.cabal') }}-
+    - name: Build Nix dependencies
+      run: nix-shell --pure --run "echo '=== Nix dependencies installed ==='"
+    - name: Build
+      run: nix-shell --pure --run "stack build --pedantic --test"
