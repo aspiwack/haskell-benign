@@ -1,9 +1,11 @@
-name:                benign
-version:             1.0.0.0
-author:              Arnaud Spiwack
-maintainer:          arnaud@spiwack.net
+name: benign
+version: 0.1.0
+author: Arnaud Spiwack
+maintainer: arnaud@spiwack.net
 github: aspiwack/haskell-benign
-copyright:           "MIT"
+copyright: MIT
+synopsis: A library for benign effects
+description: see README.md.
 
 dependencies:
   - base
@@ -15,7 +17,9 @@ dependencies:
 
 library:
   source-dirs: src
-
+  when:
+  - condition: false
+    other-modules: Paths_benign # substitute name with the package name
 ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wnoncanonical-monad-instances -Wredundant-constraints
 
 # For executables:
