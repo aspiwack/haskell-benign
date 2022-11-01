@@ -162,7 +162,10 @@ withAltering f g thing = unsafePerformIO $ do
   -- in pure code, we can call `myThreadId` and get state that is local where we
   -- are. This is what lets us implement a lexical state. We keep the global
   -- `localStates` map from thread ids to the lexical state, and use the nesting
-  -- of `async`s to represent the stack discipline.
+  -- of `async`s to represent the stack discipline. It's a little clunky, but it
+  -- works. The cost of spawning an async is, I believe, less than the cost of
+  -- I/O that will be required for the actual logging. So we are well within
+  -- bounds of the desired performance.
   me <- async $ do
     setLocalState inner_vault
     thunk <- evaluate $ eval thing
