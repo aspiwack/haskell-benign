@@ -33,6 +33,7 @@ module Benign
     unsafeSpanBenign,
     Eval (..),
     Seq (..),
+    Lazy (..),
     SeqIsEval,
     NF (..),
   )
@@ -269,6 +270,14 @@ instance (SeqIsEval a, SeqIsEval b) => SeqIsEval (Strict (a, b))
 instance (SeqIsEval a, SeqIsEval b, SeqIsEval c) => SeqIsEval (Strict (a, b, c))
 
 instance (SeqIsEval a, SeqIsEval b, SeqIsEval c, SeqIsEval d) => SeqIsEval (Strict (a, b, c, d))
+
+-- | Sometimes, you actually want an `a` to escape the context. You really do
+-- want `a` to be lazily evaluated. For this, you can use the type @'Lazy' a@.
+-- @'Lazy' a@ tells the 'Seq' strategy that, yes, indeed, you do want `a` to be
+-- lazy. The point being that @'seq' Lazy u@ doesn't evaluate @u@.
+data Lazy a = Lazy a
+
+instance SeqIsEval (Lazy a)
 
 -- | Evaluation strategy: evaluates `a` in normal form (see the `deepseq`
 -- package).
