@@ -50,10 +50,18 @@ Build as
 $ stack build
 ```
 
-Format with Ormolu 0.5.0.1
+The formatter is Ormolu 0.5.0.1.
 
 You can use Nix (specifically `nix-shell`) to provide all the
 necessary dependencies (including a compatible Haskell Language
 Server).
 
+For reasons unknown to me, Ormolu is not cached in the pinned version
+of Nix. I haven't had time to investigate, instead I'm using
+Cachix. For the `nix-shell` to load fast, [install
+cachix](https://docs.cachix.org/installation) and run (once per
+machine) prior to building the Nix shell.
 
+```shell
+$ cachix use aspiwack
+``
