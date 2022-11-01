@@ -18,6 +18,7 @@ let
         --add-flags "\
           --nix \
           --no-nix-pure \
+          --nix-path=\\"nixpkgs=${pkgs.path}\\"
           --nix-shell-file=nix/stack-integration.nix \
         "
     '';
@@ -30,6 +31,8 @@ pkgs.mkShell {
     # ghc924 matches the version from Stack
     pkgs.haskell.packages.ghc924.haskell-language-server
     pkgs.haskell.packages.ghc924.ormolu
+    # Nix for recursive calls within Stack (necessary for pure shells)
+    pkgs.nix
   ];
 
   # Configure the Nix path to our own `pkgs`, to ensure Stack-with-Nix uses the correct one rather than the global <nixpkgs> when looking for the right `ghc` argument to pass in `nix/stack-integration.nix`
