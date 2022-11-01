@@ -156,6 +156,13 @@ withAltering :: Eval b => Field a -> (Maybe a -> Maybe a) -> b -> Result b
 withAltering f g thing = unsafePerformIO $ do
   outer_vault <- myLocalState
   inner_vault <- evaluate $ alterVault g f outer_vault
+  -- We make an `async` here, not because of concurrency: it's not going to be
+  -- run concurrently with anything. It's because `myThreadId` is the only piece
+  -- of implicit state that GHC provides. Everything runs in a thread, so even
+  -- in pure code, we can call `myThreadId` and get state that is local where we
+  -- are. This is what lets us implement a lexical state. We keep the global
+  -- `localStates` map from thread ids to the lexical state, and use the nesting
+  -- of `async`s to represent the stack discipline.
   me <- async $ do
     setLocalState inner_vault
     thunk <- evaluate $ eval thing
