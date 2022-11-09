@@ -35,3 +35,18 @@ library
     , stm
     , strict-wrapper
   default-language: Haskell2010
+
+executable simple-print
+  main-is: SimplePrint.hs
+  hs-source-dirs:
+      examples
+  ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wnoncanonical-monad-instances -Wredundant-constraints
+  build-depends:
+      async
+    , base
+    , benign
+    , containers
+    , deepseq
+    , stm
+    , strict-wrapper
+  default-language: Haskell2010
