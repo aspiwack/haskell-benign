@@ -1,6 +1,10 @@
+{ withDevTools ? true }:
+
 let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
+  # ghc924 matches the version from Stack
+  ghcVersion = "924";
 in
 
 let
@@ -24,13 +28,11 @@ let
     '';
   };
 
-in
-pkgs.mkShell {
-  buildInputs = [
+  haskellBin = pkgs.haskell.lib.compose.justStaticExecutables;
+
+  buildDeps = [
     stack-wrapped
-    # ghc924 matches the version from Stack
-    pkgs.haskell.packages.ghc924.haskell-language-server
-    pkgs.haskell.packages.ghc924.ormolu
+    (haskellBin pkgs.haskell.packages."ghc${ghcVersion}".ormolu)
     # Nix for recursive calls within Stack (necessary for pure shells)
     pkgs.nix
     # Just lets us distribute project-wide commands
@@ -38,6 +40,16 @@ pkgs.mkShell {
     # Git is used to call `git ls-files` for formatting
     pkgs.git
   ];
+  devTools = [
+    # Rather than:
+    # (pkgs.haskell.packages."ghc${ghcVersion}".haskell-language-server)
+    # I'm not completely sure what the difference is
+    (pkgs.haskell-language-server.override { supportedGhcVersions = [ ghcVersion ]; })
+  ];
+
+in
+pkgs.mkShell {
+  buildInputs = buildDeps ++ (if withDevTools then devTools else []);
 
   # Configure the Nix path to our own `pkgs`, to ensure Stack-with-Nix uses the correct one rather than the global <nixpkgs> when looking for the right `ghc` argument to pass in `nix/stack-integration.nix`
   # See https://nixos.org/nixos/nix-pills/nix-search-paths.html for more information
