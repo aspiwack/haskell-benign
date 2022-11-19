@@ -44,7 +44,7 @@ import Control.Concurrent.Async (async)
 import Control.Concurrent.Async qualified as Async
 import Control.Concurrent.STM.TVar
 import Control.DeepSeq
-import Control.Exception (evaluate, finally)
+import Control.Exception (bracket_, evaluate, finally)
 import Control.Monad.STM
 import Data.Int
 import Data.Map.Strict (Map)
@@ -168,6 +168,15 @@ withAltering f g thing = unsafePerformIO $ do
   -- works. The cost of spawning an async is, I believe, less than the cost of
   -- I/O that will be required for the actual logging. So we are well within
   -- bounds of the desired performance.
+  --
+  -- I've been pointed to two other implementation of thread-local state. I
+  -- could take inspiration from either to harden this. What happens, for
+  -- instance, if the main thread receives an asynchronous exception between
+  -- starting the `async` and `wait`-ing? It may be that the local state is
+  -- leaked. Maybe `withAsync` could help.
+  --
+  -- - Very featureful implementation: https://hackage.haskell.org/package/context
+  -- - Uses the GC to collect thread-local state: https://hackage.haskell.org/package/thread-utils-context
   me <- async $ do
     setLocalState inner_vault
     thunk <- evaluate $ eval thing
@@ -203,9 +212,7 @@ unsafeSpanBenign ::
   a ->
   Result a
 unsafeSpanBenign before after thing = unsafePerformIO $ do
-  before
-  thunk <- evaluate $ eval thing
-  after
+  thunk <- bracket_ before after (evaluate $ eval thing)
   return $ extractEval thunk
 {-# NOINLINE unsafeSpanBenign #-}
 
