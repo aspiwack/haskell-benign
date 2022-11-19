@@ -1,7 +1,10 @@
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GHC2021 #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- | Benign effects are actions which are nominally effects but really doesn't
@@ -27,6 +30,8 @@ module Benign
     newField,
     withAltering,
     withSetting,
+    withAlteringIO,
+    withSettingIO,
     lookupLocalState,
     lookupLocalState',
     lookupLocalStateWithDefault,
@@ -36,6 +41,7 @@ module Benign
     Lazy (..),
     SeqIsEval,
     NF (..),
+    EvalIO (..),
   )
 where
 
@@ -152,7 +158,12 @@ setLocalState vault = do
 -- doesn't. Namely the altered state is available precisely during the
 -- evaluation of `eval thing`.
 withAltering :: Eval b => Field a -> (Maybe a -> Maybe a) -> b -> Result b
-withAltering f g thing = unsafePerformIO $ do
+withAltering f g thing = unsafePerformIO $ withAlteringIO f g (PureEval thing)
+{-# NOINLINE withAltering #-}
+
+-- | TODO
+withAlteringIO :: EvalIO b => Field a -> (Maybe a -> Maybe a) -> b -> IO (ResultIO b)
+withAlteringIO f g thing = do
   outer_vault <- myLocalState
   inner_vault <- evaluate $ alterVault g f outer_vault
   -- We make an `async` here, not because of concurrency: it's not going to be
@@ -176,14 +187,12 @@ withAltering f g thing = unsafePerformIO $ do
   -- - Uses the GC to collect thread-local state: https://hackage.haskell.org/package/thread-utils-context
   me <- async $ do
     setLocalState inner_vault
-    thunk <- evaluate $ eval thing
-    return $ extractEval thunk
+    evalIO thing
   -- Note: this implementation relies of the fact that thread ids can't be
   -- reused, otherwise there may be races. I'm not sure that GHC guarantees
   -- this property.
   Async.wait me
     `finally` modifyMVar_ localStates (evaluate . Map.delete (Async.asyncThreadId me))
-{-# NOINLINE withAltering #-}
 
 -- | @'withSetting f a thing@ evaluates 'thing' with the local state's field `f`
 -- set to `a`.
@@ -191,6 +200,10 @@ withAltering f g thing = unsafePerformIO $ do
 -- See 'withAltering' for more explanations.
 withSetting :: Eval b => Field a -> a -> b -> Result b
 withSetting f a = withAltering f (\_ -> Just a)
+
+-- | TODO
+withSettingIO :: EvalIO b => Field a -> a -> b -> IO (ResultIO b)
+withSettingIO f a = withAlteringIO f (\_ -> Just a)
 
 -- | @'unsafeSpanBenign' before after thing@ runs the `before` action before
 -- evaluating `thing`, then runs the `after` action.
@@ -227,6 +240,7 @@ class Eval a where
 
 -- | Evaluation strategy: evaluates `a` by simply calling `seq` on it.
 newtype Seq a = Seq a
+  deriving anyclass (EvalIO)
 
 instance SeqIsEval a => Eval (Seq a) where
   newtype Thunk (Seq a) = SeqThunk a
@@ -290,9 +304,33 @@ instance SeqIsEval (Lazy a)
 -- even if it's already in normal form. As a consequence it's not recommended to
 -- use this lightly.
 newtype NF a = NF a
+  deriving anyclass (EvalIO)
 
 instance NFData a => Eval (NF a) where
   newtype Thunk (NF a) = NFThunk a
   type Result (NF a) = a
   eval (NF a) = NFThunk $ force a
   extractEval (NFThunk a) = a
+
+-- | TODO: evaluate in an IO context. Different monad because I want `EvalIO (IO a)`
+-- but not `Eval (IO a)` (since it would let me `unsafePerformIO`)
+class EvalIO a where
+  type ResultIO a
+  type ResultIO a = Result a
+
+  evalIO :: a -> IO (ResultIO a)
+  default evalIO :: (Eval a, ResultIO a ~ Result a) => a -> IO (ResultIO a)
+  evalIO = evalInIO
+
+evalInIO :: Eval a => a -> IO (Result a)
+evalInIO thing = extractEval <$> evaluate (eval thing)
+
+instance EvalIO (IO a) where
+  type ResultIO (IO a) = a
+  evalIO = id
+
+newtype PureEval a = PureEval a
+
+instance Eval a => EvalIO (PureEval a) where
+  type ResultIO (PureEval a) = Result a
+  evalIO (PureEval a) = evalInIO a
