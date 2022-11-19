@@ -1,0 +1,21 @@
+name: benign-katip
+version: 0.1.0
+author: Arnaud Spiwack
+maintainer: arnaud@spiwack.net
+github: aspiwack/haskell-benign
+copyright: MIT
+synopsis: A library for benign effects
+description: see README.md.
+
+dependencies:
+  - base
+  - benign
+  - katip
+
+ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wnoncanonical-monad-instances -Wredundant-constraints
+
+library:
+  source-dirs: src
+  when:
+  - condition: false
+    other-modules: Paths_benign_katip # substitute name with the package name

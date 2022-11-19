@@ -46,6 +46,23 @@ optimisation through cost centres; it isn't surprising that we are
 having a similar problem). With the optimisation not working at that
 level, strictness is much less of a problem.
 
+## Backends
+
+Backends are shipped as separate package (with the exception of
+backends which require no additional dependencies).
+
+I've got to confess that it's a major pain in my delicately dignified
+bottom. The language server works rather poorly across packages;
+duplicating the Cabal files is somewhat annoying, what with the common
+stanzas being lost and the version numbers being easier to get wrong,
+I'll have to publish several packages every time I want to make a
+release. I'm probably forgetting other issues. But until Hackage
+supports multiple-library packages, it's the only solution that I have
+to avoid pulling, say, Katip, when I want to use Opentelemetry.
+
+You are welcome to write benign effects directly in your package. If
+you wish to upstream one of my backends: I'll deprecate mine.
+
 ## Build
 
 Build as
