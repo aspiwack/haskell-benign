@@ -24,6 +24,7 @@ source-repository head
 library
   exposed-modules:
       Benign
+      Benign.GhcEventsAnalyze
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wnoncanonical-monad-instances -Wredundant-constraints
