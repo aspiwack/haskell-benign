@@ -42,10 +42,8 @@ where
 import Control.Concurrent
 import Control.Concurrent.Async (async)
 import Control.Concurrent.Async qualified as Async
-import Control.Concurrent.STM.TVar
 import Control.DeepSeq
 import Control.Exception (bracket_, evaluate, finally)
-import Control.Monad.STM
 import Data.Int
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -90,16 +88,15 @@ type LocalStates = Map ThreadId Vault
 -- keeping in mind, though, that the value associated with a thread is never
 -- modified: only set (once) then deleted. So this is what the structure would
 -- have to recognise is non-interfering for STM actions.
-localStates :: TVar LocalStates
-localStates = unsafePerformIO $ newTVarIO Map.empty
+localStates :: MVar LocalStates
+localStates = unsafePerformIO $ newMVar Map.empty
 {-# NOINLINE localStates #-}
 
 myLocalState :: IO Vault
 myLocalState = do
   tid <- myThreadId
-  atomically $ do
-    currentStates <- readTVar localStates
-    return $ Map.findWithDefault Map.empty tid currentStates
+  currentStates <- readMVar localStates
+  return $ Map.findWithDefault Map.empty tid currentStates
 
 lookupLocalState :: Field a -> IO (Maybe a)
 lookupLocalState f = lookupVault f <$> myLocalState
@@ -117,7 +114,7 @@ lookupLocalStateWithDefault deflt f = fromMaybe deflt <$> lookupLocalState f
 setLocalState :: Vault -> IO ()
 setLocalState vault = do
   tid <- myThreadId
-  atomically $ modifyTVar' localStates $ Map.insert tid vault
+  modifyMVar_ localStates (evaluate . Map.insert tid vault)
 
 -- | @'withAltering' f g thing@ evaluates 'thing' with the local state's field
 -- `f` set by `g` in the style of 'Map.alter'.
@@ -185,7 +182,7 @@ withAltering f g thing = unsafePerformIO $ do
   -- reused, otherwise there may be races. I'm not sure that GHC guarantees
   -- this property.
   Async.wait me
-    `finally` atomically (modifyTVar' localStates (Map.delete (Async.asyncThreadId me)))
+    `finally` modifyMVar_ localStates (evaluate . Map.delete (Async.asyncThreadId me))
 {-# NOINLINE withAltering #-}
 
 -- | @'withSetting f a thing@ evaluates 'thing' with the local state's field `f`
