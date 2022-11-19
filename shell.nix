@@ -1,6 +1,8 @@
 let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
+  # ghc924 matches the version from Stack
+  ghcVersion = "924";
 in
 
 let
@@ -24,13 +26,15 @@ let
     '';
   };
 
+  haskellBin = pkgs.haskell.lib.compose.justStaticExecutables;
+
 in
 pkgs.mkShell {
   buildInputs = [
     stack-wrapped
-    # ghc924 matches the version from Stack
-    pkgs.haskell.packages.ghc924.haskell-language-server
-    pkgs.haskell.packages.ghc924.ormolu
+    # (pkgs.haskell.packages."ghc${ghcVersion}".haskell-language-server)
+    (pkgs.haskell-language-server.override { supportedGhcVersions = [ ghcVersion ]; })
+    (haskellBin pkgs.haskell.packages."ghc${ghcVersion}".ormolu)
     # Nix for recursive calls within Stack (necessary for pure shells)
     pkgs.nix
     # Just lets us distribute project-wide commands
