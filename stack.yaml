@@ -1,8 +1,8 @@
 resolver: nightly-2022-10-30
 packages:
   - .
-  - katip
-  - timestats
+  - backends/katip
+  - backends/timestats
 
 extra-deps:
   - timestats-0.1.0
