@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: timestats-0.1.0@sha256:86677d16269df53fb44d1aa8e90bfd6503461d637ff3d914f30b1d4ce98da5d2,1284
+    pantry-tree:
+      sha256: ae05a6e3b2fdb99eaae6b465c00a5bfbb525d6b7cb5839e685eb38c4c0ed1394
+      size: 277
+  original:
+    hackage: timestats-0.1.0
 snapshots:
 - completed:
     sha256: eca327fb42f0942a994c95e8765e11ba6c416a6e73251745b480e207b9c6c274

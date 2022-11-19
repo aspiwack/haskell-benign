@@ -42,6 +42,7 @@ module Benign
     SeqIsEval,
     NF (..),
     EvalIO (..),
+    PureEval (..),
   )
 where
 
