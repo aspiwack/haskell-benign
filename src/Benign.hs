@@ -43,6 +43,10 @@ module Benign
     NF (..),
     EvalIO (..),
     PureEval (..),
+
+    -- * Monads
+    EvalM (..),
+    withSettingM,
   )
 where
 
@@ -51,6 +55,10 @@ import Control.Concurrent.Async (async)
 import Control.Concurrent.Async qualified as Async
 import Control.DeepSeq
 import Control.Exception (bracket_, evaluate, finally)
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State.Lazy
+import Data.Coerce
+import Data.Functor.Identity
 import Data.Int
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -239,6 +247,12 @@ class Eval a where
 
   extractEval :: Thunk a -> Result a
 
+instance (Eval a, Eval b) => Eval (a, b) where
+  data Thunk (a, b) = PairThunk (Thunk a) (Thunk b)
+  type Result (a, b) = (Result a, Result b)
+  eval (a, b) = PairThunk (eval a) (eval b)
+  extractEval (PairThunk a b) = (extractEval a, extractEval b)
+
 -- | Evaluation strategy: evaluates `a` by simply calling `seq` on it.
 newtype Seq a = Seq a
   deriving anyclass (EvalIO)
@@ -335,3 +349,45 @@ newtype PureEval a = PureEval a
 instance Eval a => EvalIO (PureEval a) where
   type ResultIO (PureEval a) = Result a
   evalIO (PureEval a) = evalInIO a
+
+---------------------------------------------------------------------------
+--
+-- Evaluate in a monad
+--
+---------------------------------------------------------------------------
+
+-- | In non-IO monadic code (that is when monads are used as a way to organise
+-- pure code), naturally, we'll be wanting to use benign effect as well. How
+-- scopes and running monadic code interleave doesn't have a generic
+-- answer. This is because monadic code is fundamentally staged: first you build
+-- a monadic expression, then it is run. Benign effects, and in particular
+-- local state updates, must happen when the monad is run, not when the
+-- expression is built.
+--
+-- Just like there isn't a generic `run` function, since all monads interpret
+-- the monadic expression differently, each monad needs to explain how they
+-- implement 'withAltering' and 'unsafeSpanBenign'. This is what the (admittedly
+-- poorly named) 'EvalM' class lets monad do.
+class EvalM m where
+  withAlteringM :: Eval b => Field a -> (Maybe a -> Maybe a) -> m b -> m (Result b)
+  unsafeSpanBenignM :: Eval a => IO () -> IO () -> m a -> m (Result a)
+
+withSettingM :: (EvalM m, Eval b) => Field a -> a -> m b -> m (Result b)
+withSettingM f a = withAlteringM f (\_ -> Just a)
+
+instance EvalM Identity where
+  withAlteringM :: forall b a. Eval b => Field a -> (Maybe a -> Maybe a) -> Identity b -> Identity (Result b)
+  withAlteringM = coerce $ withAltering @b @a
+  unsafeSpanBenignM :: forall a. Eval a => IO () -> IO () -> Identity a -> Identity (Result a)
+  unsafeSpanBenignM = coerce $ unsafeSpanBenign @a
+
+instance (EvalM m, Eval s, Result s ~ s) => EvalM (StateT s m) where
+  withAlteringM f g (StateT thing) = StateT $ \s -> withAlteringM f g (thing s)
+
+  unsafeSpanBenignM :: (EvalM m, Eval s, Result s ~ s, Eval a) => IO () -> IO () -> StateT s m a -> StateT s m (Result a)
+  unsafeSpanBenignM before after (StateT thing) = StateT $ \s -> unsafeSpanBenignM before after (thing s)
+
+instance (EvalM m) => EvalM (ReaderT e m) where
+  withAlteringM f g (ReaderT thing) = ReaderT $ \e -> withAlteringM f g (thing e)
+
+  unsafeSpanBenignM before after (ReaderT thing) = ReaderT $ \e -> unsafeSpanBenignM before after (thing e)
