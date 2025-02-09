@@ -46,7 +46,9 @@ module Benign
 
     -- * Monads
     EvalM (..),
+    withAlteringM,
     withSettingM,
+    unsafeSpanBenignM,
   )
 where
 
@@ -369,25 +371,23 @@ instance Eval a => EvalIO (PureEval a) where
 -- implement 'withAltering' and 'unsafeSpanBenign'. This is what the (admittedly
 -- poorly named) 'EvalM' class lets monad do.
 class EvalM m where
-  withAlteringM :: Eval b => Field a -> (Maybe a -> Maybe a) -> m b -> m (Result b)
-  unsafeSpanBenignM :: Eval a => IO () -> IO () -> m a -> m (Result a)
+  spliceEval :: Eval b => (forall a. Eval a => (a -> Result a)) -> m b -> m (Result b)
+
+withAlteringM :: (EvalM m, Eval b) => Field a -> (Maybe a -> Maybe a) -> m b -> m (Result b)
+withAlteringM f g = spliceEval (withAltering f g)
 
 withSettingM :: (EvalM m, Eval b) => Field a -> a -> m b -> m (Result b)
 withSettingM f a = withAlteringM f (\_ -> Just a)
 
+unsafeSpanBenignM :: (EvalM m, Eval a) => IO () -> IO () -> m a -> m (Result a)
+unsafeSpanBenignM before after = spliceEval (unsafeSpanBenign before after)
+
 instance EvalM Identity where
-  withAlteringM :: forall b a. Eval b => Field a -> (Maybe a -> Maybe a) -> Identity b -> Identity (Result b)
-  withAlteringM = coerce $ withAltering @b @a
-  unsafeSpanBenignM :: forall a. Eval a => IO () -> IO () -> Identity a -> Identity (Result a)
-  unsafeSpanBenignM = coerce $ unsafeSpanBenign @a
+  spliceEval :: forall b. Eval b => (forall a. Eval a => a -> Result a) -> Identity b -> Identity (Result b)
+  spliceEval f = coerce $ f @b
 
 instance (EvalM m, Eval s, Result s ~ s) => EvalM (StateT s m) where
-  withAlteringM f g (StateT thing) = StateT $ \s -> withAlteringM f g (thing s)
-
-  unsafeSpanBenignM :: (EvalM m, Eval s, Result s ~ s, Eval a) => IO () -> IO () -> StateT s m a -> StateT s m (Result a)
-  unsafeSpanBenignM before after (StateT thing) = StateT $ \s -> unsafeSpanBenignM before after (thing s)
+  spliceEval f (StateT thing) = StateT $ \s -> spliceEval f (thing s)
 
 instance (EvalM m) => EvalM (ReaderT e m) where
-  withAlteringM f g (ReaderT thing) = ReaderT $ \e -> withAlteringM f g (thing e)
-
-  unsafeSpanBenignM before after (ReaderT thing) = ReaderT $ \e -> unsafeSpanBenignM before after (thing e)
+  spliceEval f (ReaderT thing) = ReaderT $ \e -> spliceEval f (thing e)
