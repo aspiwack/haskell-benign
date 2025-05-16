@@ -1,5 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GHC2021 #-}
 {-# LANGUAGE RoleAnnotations #-}
@@ -31,24 +29,30 @@ module Benign
     withAltering,
     withSetting,
     withAlteringIO,
+    withAlteringIO',
     withSettingIO,
+    withSettingIO',
     lookupLocalState,
     lookupLocalState',
     lookupLocalStateWithDefault,
     unsafeSpanBenign,
-    Eval (..),
-    Seq (..),
-    Lazy (..),
-    SeqIsEval,
-    NF (..),
-    EvalIO (..),
-    PureEval (..),
 
     -- * Monads
     EvalM (..),
     withAlteringM,
+    withAlteringM',
     withSettingM,
+    withSettingM',
     unsafeSpanBenignM,
+    unsafeSpanBenignM',
+
+    -- * Strategies
+    Strat,
+    E (..),
+    lazy,
+    whnf,
+    nf,
+    Eval (..),
   )
 where
 
@@ -65,7 +69,6 @@ import Data.Int
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
-import Data.Strict.Wrapper
 import Data.Unique (Unique)
 import Data.Unique qualified as Unique
 import Data.Word
@@ -133,8 +136,8 @@ setLocalState vault = do
   tid <- myThreadId
   modifyMVar_ localStates (evaluate . Map.insert tid vault)
 
--- | @'withAltering' f g thing@ evaluates 'thing' with the local state's field
--- `f` set by `g` in the style of 'Map.alter'.
+-- | @'withAltering' f g strat thing@ evaluates 'thing' with the local state's
+-- field `f` set by `g` in the style of 'Map.alter'.
 --
 -- Why do we need this? If we are to do some logging in pure code, we still need
 -- to know /where/ to log too. That is we need configuration. It is out of
@@ -161,20 +164,20 @@ setLocalState vault = do
 -- make much sense to modify a global state. The modification could happen at
 -- any time and in any order. The result would be quite ill-defined.
 --
--- The reason why we need the 'Eval' constraint is that, as a direct consequence
+-- The reason why we need the 'strat' argument is that, as a direct consequence
 -- of the design, the lexical state is passed dynamically to `thing`. That is,
 -- the state that is seen by a piece of code depends on where it's executed: if
 -- a lazy thunk escapes 'withAltering', then it's going to be picking up a
--- different state. 'Eval' lets us be deliberate about what escapes and what
+-- different state. 'strat' lets us be deliberate about what escapes and what
 -- doesn't. Namely the altered state is available precisely during the
--- evaluation of `eval thing`.
-withAltering :: Eval b => Field a -> (Maybe a -> Maybe a) -> b -> Result b
-withAltering f g thing = unsafePerformIO $ withAlteringIO f g (PureEval thing)
+-- evaluation of `strat thing`.
+withAltering :: Field a -> (Maybe a -> Maybe a) -> Strat b -> b -> b
+withAltering f g strat thing = unsafePerformIO $ withAlteringIO f g strat (return thing)
 {-# NOINLINE withAltering #-}
 
 -- | TODO
-withAlteringIO :: EvalIO b => Field a -> (Maybe a -> Maybe a) -> b -> IO (ResultIO b)
-withAlteringIO f g thing = do
+withAlteringIO :: Field a -> (Maybe a -> Maybe a) -> Strat b -> IO b -> IO b
+withAlteringIO f g strat thing = do
   outer_vault <- myLocalState
   inner_vault <- evaluate $ alterVault g f outer_vault
   -- We make an `async` here, not because of concurrency: it's not going to be
@@ -198,26 +201,38 @@ withAlteringIO f g thing = do
   -- - Uses the GC to collect thread-local state: https://hackage.haskell.org/package/thread-utils-context
   me <- async $ do
     setLocalState inner_vault
-    evalIO thing
+    r <- thing
+    E <- evaluate $ strat r
+    return r
   -- Note: this implementation relies of the fact that thread ids can't be
   -- reused, otherwise there may be races. I'm not sure that GHC guarantees
   -- this property.
   Async.wait me
     `finally` modifyMVar_ localStates (evaluate . Map.delete (Async.asyncThreadId me))
 
+-- | Like 'withAltering', but the `strat` is `lazy`. This is often the right
+-- choice in a monadic context.
+withAlteringIO' :: Field a -> (Maybe a -> Maybe a) -> IO b -> IO b
+withAlteringIO' f g = withAlteringIO f g lazy
+
 -- | @'withSetting f a thing@ evaluates 'thing' with the local state's field `f`
 -- set to `a`.
 --
 -- See 'withAltering' for more explanations.
-withSetting :: Eval b => Field a -> a -> b -> Result b
+withSetting :: Field a -> a -> Strat b -> b -> b
 withSetting f a = withAltering f (\_ -> Just a)
 
 -- | TODO
-withSettingIO :: EvalIO b => Field a -> a -> b -> IO (ResultIO b)
+withSettingIO :: Field a -> a -> Strat b -> IO b -> IO b
 withSettingIO f a = withAlteringIO f (\_ -> Just a)
 
+-- | Like 'withSetting', but the `strat` is `lazy`. This is often the right
+-- choice in a monadic context.
+withSettingIO' :: Field a -> a -> IO b -> IO b
+withSettingIO' f a = withSettingIO f a lazy
+
 -- | @'unsafeSpanBenign' before after thing@ runs the `before` action before
--- evaluating `thing`, then runs the `after` action.
+-- evaluating `strat thing`, then runs the `after` action.
 --
 -- 'unsafeSpanBenign' is not typically used directly in programs, but used to
 -- write safe benign-effect-spanning functions.
@@ -225,132 +240,17 @@ withSettingIO f a = withAlteringIO f (\_ -> Just a)
 -- To call 'unsafeSpanBenign' safely, make sure that the `before` and `after`
 -- actions are indeed benign.
 unsafeSpanBenign ::
-  Eval a =>
   -- | Action to run before evaluation
   IO () ->
   -- | Action to run after evaluation
   IO () ->
+  Strat a ->
   a ->
-  Result a
-unsafeSpanBenign before after thing = unsafePerformIO $ do
-  thunk <- bracket_ before after (evaluate $ eval thing)
-  return $ extractEval thunk
+  a
+unsafeSpanBenign before after strat thing = unsafePerformIO $ do
+  E <- bracket_ before after (evaluate $ strat thing)
+  return thing
 {-# NOINLINE unsafeSpanBenign #-}
-
-class Eval a where
-  data Thunk a
-
-  -- TODO: make Result representation parametric, possibly? This is kind of the
-  -- result to introduce the `Thunk` type to begin with.
-  type Result a
-
-  -- | Evaluating the @eval x@ thunk executes the evaluation strategy.
-  eval :: a -> Thunk a
-
-  extractEval :: Thunk a -> Result a
-
-instance (Eval a, Eval b) => Eval (a, b) where
-  data Thunk (a, b) = PairThunk (Thunk a) (Thunk b)
-  type Result (a, b) = (Result a, Result b)
-  eval (a, b) = PairThunk (eval a) (eval b)
-  extractEval (PairThunk a b) = (extractEval a, extractEval b)
-
--- | Evaluation strategy: evaluates `a` by simply calling `seq` on it.
-newtype Seq a = Seq a
-  deriving anyclass (EvalIO)
-
-instance SeqIsEval a => Eval (Seq a) where
-  newtype Thunk (Seq a) = SeqThunk a
-  type Result (Seq a) = a
-  eval (Seq x) = SeqThunk x
-  extractEval (SeqThunk x) = x
-
--- | Qualifies type where `seq` evaluates sufficiently. This is a fail-safe to
--- avoid using the 'Seq' strategy by mistake. /E.g./ @'Seq' []@ is unlikely to
--- be intended.
-class SeqIsEval a
-
-instance SeqIsEval Int
-
-instance SeqIsEval Int32
-
-instance SeqIsEval Int64
-
-instance SeqIsEval Integer
-
-instance SeqIsEval Word
-
-instance SeqIsEval Word32
-
-instance SeqIsEval Word64
-
-instance SeqIsEval Float
-
-instance SeqIsEval Double
-
-instance SeqIsEval Char
-
-instance SeqIsEval Bool
-
-instance SeqIsEval Ordering
-
-instance SeqIsEval ()
-
-instance SeqIsEval a => SeqIsEval (Strict (Maybe a))
-
-instance (SeqIsEval a, SeqIsEval b) => SeqIsEval (Strict (Either a b))
-
-instance (SeqIsEval a, SeqIsEval b) => SeqIsEval (Strict (a, b))
-
-instance (SeqIsEval a, SeqIsEval b, SeqIsEval c) => SeqIsEval (Strict (a, b, c))
-
-instance (SeqIsEval a, SeqIsEval b, SeqIsEval c, SeqIsEval d) => SeqIsEval (Strict (a, b, c, d))
-
--- | Sometimes, you actually want an `a` to escape the context. You really do
--- want `a` to be lazily evaluated. For this, you can use the type @'Lazy' a@.
--- @'Lazy' a@ tells the 'Seq' strategy that, yes, indeed, you do want `a` to be
--- lazy. The point being that @'seq' Lazy u@ doesn't evaluate @u@.
-data Lazy a = Lazy a
-
-instance SeqIsEval (Lazy a)
-
--- | Evaluation strategy: evaluates `a` in normal form (see the `deepseq`
--- package).
---
--- This is a pretty blunt strategy, as it necessarily traverse the result type,
--- even if it's already in normal form. As a consequence it's not recommended to
--- use this lightly.
-newtype NF a = NF a
-  deriving anyclass (EvalIO)
-
-instance NFData a => Eval (NF a) where
-  newtype Thunk (NF a) = NFThunk a
-  type Result (NF a) = a
-  eval (NF a) = NFThunk $ force a
-  extractEval (NFThunk a) = a
-
--- | TODO: evaluate in an IO context. Different monad because I want `EvalIO (IO a)`
--- but not `Eval (IO a)` (since it would let me `unsafePerformIO`)
-class EvalIO a where
-  type ResultIO a
-  type ResultIO a = Result a
-
-  evalIO :: a -> IO (ResultIO a)
-  default evalIO :: (Eval a, ResultIO a ~ Result a) => a -> IO (ResultIO a)
-  evalIO = evalInIO
-
-evalInIO :: Eval a => a -> IO (Result a)
-evalInIO thing = extractEval <$> evaluate (eval thing)
-
-instance EvalIO (IO a) where
-  type ResultIO (IO a) = a
-  evalIO = id
-
-newtype PureEval a = PureEval a
-
-instance Eval a => EvalIO (PureEval a) where
-  type ResultIO (PureEval a) = Result a
-  evalIO (PureEval a) = evalInIO a
 
 ---------------------------------------------------------------------------
 --
@@ -371,23 +271,142 @@ instance Eval a => EvalIO (PureEval a) where
 -- implement 'withAltering' and 'unsafeSpanBenign'. This is what the (admittedly
 -- poorly named) 'EvalM' class lets monad do.
 class EvalM m where
-  spliceEval :: Eval b => (forall a. Eval a => (a -> Result a)) -> m b -> m (Result b)
+  spliceEval :: (forall a. Strat a -> a -> a) -> Strat b -> m b -> m b
 
-withAlteringM :: (EvalM m, Eval b) => Field a -> (Maybe a -> Maybe a) -> m b -> m (Result b)
+withAlteringM :: (EvalM m) => Field a -> (Maybe a -> Maybe a) -> Strat b -> m b -> m b
 withAlteringM f g = spliceEval (withAltering f g)
 
-withSettingM :: (EvalM m, Eval b) => Field a -> a -> m b -> m (Result b)
+-- | Like 'withAlteringM', but the `strat` is `lazy`. This is often the right
+-- choice in a monadic context.
+withAlteringM' :: (EvalM m) => Field a -> (Maybe a -> Maybe a) -> m b -> m b
+withAlteringM' f g = withAlteringM f g lazy
+
+-- | Like 'withSetting', but in a monadic context. The `strat` is `lazy`. This
+-- is often the right choice in a monadic context.
+withSettingM :: (EvalM m) => Field a -> a -> Strat b -> m b -> m b
 withSettingM f a = withAlteringM f (\_ -> Just a)
 
-unsafeSpanBenignM :: (EvalM m, Eval a) => IO () -> IO () -> m a -> m (Result a)
+-- | Like 'withSettingM', but the `strat` is `lazy`. This is often the right
+-- choice in a monadic context.
+withSettingM' :: (EvalM m) => Field a -> a -> m b -> m b
+withSettingM' f a = withSettingM f a lazy
+
+unsafeSpanBenignM :: (EvalM m) => IO () -> IO () -> Strat a -> m a -> m a
 unsafeSpanBenignM before after = spliceEval (unsafeSpanBenign before after)
 
+-- | Like 'unsafeSpanBenignM', but the `strat` is `lazy`. This is often the
+-- right choice in a monadic context.
+unsafeSpanBenignM' :: (EvalM m) => IO () -> IO () -> m a -> m a
+unsafeSpanBenignM' before after = unsafeSpanBenignM before after lazy
+
 instance EvalM Identity where
-  spliceEval :: forall b. Eval b => (forall a. Eval a => a -> Result a) -> Identity b -> Identity (Result b)
+  spliceEval :: forall b. (forall a. Strat a -> a -> a) -> Strat b -> Identity b -> Identity b
   spliceEval f = coerce $ f @b
 
-instance (EvalM m, Eval s, Result s ~ s) => EvalM (StateT s m) where
-  spliceEval f (StateT thing) = StateT $ \s -> spliceEval f (thing s)
+-- | Doesn't evaluate the state. It would be possible to require `'Eval' s` so
+-- that the state can also be evaluated. Unclear what is the most natural.
+instance (EvalM m) => EvalM (StateT s m) where
+  spliceEval f strat (StateT thing) = StateT $ \s -> spliceEval f tupStrat (thing s)
+    where
+      tupStrat (b, _) = strat b
 
 instance (EvalM m) => EvalM (ReaderT e m) where
-  spliceEval f (ReaderT thing) = ReaderT $ \e -> spliceEval f (thing e)
+  spliceEval f strat (ReaderT thing) = ReaderT $ \e -> spliceEval f strat (thing e)
+
+---------------------------------------------------------------------------
+--
+-- Evaluate in a monad
+--
+---------------------------------------------------------------------------
+
+-- | Evaluation strategies. The idea is that evaluating with strategy `strat` is
+-- the same as evaluating `strat a` in whnf.
+--
+-- This is inspired by `Control.Seq.Strategy` from the
+-- [parallel](https://hackage.haskell.org/package/parallel) package. It's
+-- actually roughly the same type, but a little more modern. Making sure in
+-- particular that 'E', as a monoid, is strict, so that
+--
+-- > 'foldMap' :: Foldable t => Strat a -> Strat (t a)
+--
+-- Evaluates all the position in a container.
+type Strat a = a -> E
+
+data E = E
+  deriving stock (Eq, Ord, Enum, Bounded, Show, Read)
+
+instance Semigroup E where
+  E <> E = E
+
+instance Monoid E where
+  mempty = E
+
+-- | Doesn't do any evaluation.
+lazy :: Strat a
+lazy = mempty
+
+-- | Evaluates in whnf. Like 'seq'
+whnf :: Strat a
+whnf a = a `seq` E
+
+nf :: (NFData a) => Strat a
+nf a = a `deepseq` E
+
+class Eval a where
+  -- | A canonical strategy for type `a`.
+  eval :: Strat a
+
+instance Eval Int where
+  eval = (`seq` E)
+
+instance Eval Int32 where
+  eval = (`seq` E)
+
+instance Eval Int64 where
+  eval = (`seq` E)
+
+instance Eval Word where
+  eval = (`seq` E)
+
+instance Eval Word32 where
+  eval = (`seq` E)
+
+instance Eval Word64 where
+  eval = (`seq` E)
+
+instance Eval Bool where
+  eval = (`seq` E)
+
+instance Eval Char where
+  eval = (`seq` E)
+
+instance Eval Double where
+  eval = (`seq` E)
+
+instance Eval Float where
+  eval = (`seq` E)
+
+instance Eval () where
+  eval = (`seq` E)
+
+instance Eval Ordering where
+  eval = (`seq` E)
+
+instance Eval a => Eval (Maybe a) where
+  eval = foldMap eval
+
+instance Eval a => Eval [a] where
+  eval = foldMap eval
+
+instance (Eval a, Eval b) => Eval (Either a b) where
+  eval (Left a) = eval a
+  eval (Right b) = eval b
+
+instance (Eval a, Eval b) => Eval (a, b) where
+  eval (a, b) = eval a <> eval b
+
+instance (Eval a, Eval b, Eval c) => Eval (a, b, c) where
+  eval (a, b, c) = eval a <> eval b <> eval c
+
+instance (Eval a, Eval b, Eval c, Eval d) => Eval (a, b, c, d) where
+  eval (a, b, c, d) = eval a <> eval b <> eval c <> eval d

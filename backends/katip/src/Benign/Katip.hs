@@ -21,14 +21,14 @@ katipNamespace = unsafePerformIO Benign.newField
 {-# NOINLINE katipNamespace #-}
 
 -- | See 'Katip.katipAddContext'.
-withKatipContext :: (Katip.LogItem i, Benign.Eval a) => i -> a -> Benign.Result a
+withKatipContext :: (Katip.LogItem i) => i -> Benign.Strat a -> a -> a
 withKatipContext item = Benign.withAltering katipContext addContext
   where
     addContext (Just st) = Just $ st <> Katip.liftPayload item
     addContext Nothing = error "todo"
 
 -- | See 'Katip.katipAddNamespace'.
-withKatipNamespace :: Benign.Eval a => Katip.Namespace -> a -> Benign.Result a
+withKatipNamespace :: Katip.Namespace -> Benign.Strat a -> a -> a
 withKatipNamespace namespace = Benign.withAltering katipNamespace addNamespace
   where
     addNamespace (Just st) = Just $ st <> namespace
@@ -36,18 +36,19 @@ withKatipNamespace namespace = Benign.withAltering katipNamespace addNamespace
 
 -- | Within this computation, Katip is configured.
 withKatip ::
-  (Katip.LogItem c, Benign.EvalIO a) =>
+  (Katip.LogItem c) =>
   Katip.LogEnv ->
   c ->
   Katip.Namespace ->
-  a ->
-  IO (Benign.ResultIO a)
-withKatip env ctx namespace =
-  Benign.withSettingIO katipEnv env
-    . Benign.withSettingIO katipContext (Katip.liftPayload ctx)
-    . Benign.withSettingIO katipNamespace namespace
+  Benign.Strat a ->
+  IO a ->
+  IO a
+withKatip env ctx namespace strat =
+  Benign.withSettingIO' katipEnv env
+    . Benign.withSettingIO' katipContext (Katip.liftPayload ctx)
+    . Benign.withSettingIO katipNamespace namespace strat
 
-logLocM :: forall a. (Benign.Eval a, HasCallStack) => Katip.Severity -> Katip.LogStr -> a -> Benign.Result a
+logLocM :: forall a. (HasCallStack) => Katip.Severity -> Katip.LogStr -> Benign.Strat a -> a -> a
 logLocM severity str = withFrozenCallStack spanLog
   where
     -- The whole purpose of naming `span` is to freeze the call stack. It's
@@ -58,7 +59,7 @@ logLocM severity str = withFrozenCallStack spanLog
     -- scratch. This would be invisible. I tried to harden this function by
     -- declaring type signatures everywhere. I haven't tested it yet though. It
     -- may be wrong.
-    spanLog :: HasCallStack => a -> Benign.Result a
+    spanLog :: HasCallStack => Benign.Strat a -> a -> a
     spanLog = Benign.unsafeSpanBenign doLog (return ())
 
     doLog :: HasCallStack => IO ()

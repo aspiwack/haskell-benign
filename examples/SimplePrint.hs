@@ -2,7 +2,6 @@
 
 module Main where
 
-import Benign (Seq (..))
 import Benign qualified
 import Data.Maybe
 import GHC.IO.Unsafe (unsafePerformIO)
@@ -30,7 +29,7 @@ context = unsafePerformIO Benign.newField
 {-# NOINLINE context #-}
 
 -- 'withContext' is called to extend the context in its scope.
-withContext :: Benign.Eval a => String -> a -> Benign.Result a
+withContext :: String -> Benign.Strat a -> a -> a
 withContext additional_ctx = Benign.withAltering context $ \ctx ->
   Just $
     fromMaybe "" ctx ++ " " ++ additional_ctx
@@ -38,7 +37,7 @@ withContext additional_ctx = Benign.withAltering context $ \ctx ->
 -- The 'log' function is the one performing the logging. It is a little
 -- degenerate, as far as benign effects go, as it doesn't do anything after the
 -- end of the evaluation.
-log :: Benign.Eval a => String -> a -> Benign.Result a
+log :: String -> Benign.Strat a -> a -> a
 log log_line = Benign.unsafeSpanBenign do_log (return ())
   where
     do_log :: IO ()
@@ -53,10 +52,10 @@ log log_line = Benign.unsafeSpanBenign do_log (return ())
 ------------------------------------------------------------------------------
 
 (+:) :: Int -> Int -> Int
-n +: p = (withContext "left:" (Seq n)) + (withContext "right:" (Seq p))
+n +: p = (withContext "left:" Benign.whnf n) + (withContext "right:" Benign.whnf p)
 
 incr :: Int -> Int
-incr n = log (show n) $ Seq $ n + 1
+incr n = log (show n) Benign.whnf $ n + 1
 
 myvalue :: Int
 myvalue = incr 18 +: incr 42 +: incr 57

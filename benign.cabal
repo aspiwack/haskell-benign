@@ -34,7 +34,6 @@ library
     , containers
     , deepseq
     , stm
-    , strict-wrapper
     , transformers
   default-language: Haskell2010
 
@@ -50,6 +49,5 @@ executable simple-print
     , containers
     , deepseq
     , stm
-    , strict-wrapper
     , transformers
   default-language: Haskell2010

@@ -12,7 +12,7 @@ module Benign.GhcEventsAnalyze where
 import Benign qualified
 import Debug.Trace (traceEventIO)
 
-event :: Benign.Eval a => String -> a -> Benign.Result a
+event :: String -> Benign.Strat a -> a -> a
 event event_name =
   Benign.unsafeSpanBenign
     (traceEventIO $ "START " ++ event_name)
