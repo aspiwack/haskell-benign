@@ -22,17 +22,11 @@ katipNamespace = unsafePerformIO Benign.newField
 
 -- | See 'Katip.katipAddContext'.
 withKatipContext :: (Katip.LogItem i) => i -> Benign.Strat a -> a -> a
-withKatipContext item = Benign.withAltering katipContext addContext
-  where
-    addContext (Just st) = Just $ st <> Katip.liftPayload item
-    addContext Nothing = error "todo"
+withKatipContext item = Benign.withAltering katipContext (<> Just (Katip.liftPayload item))
 
 -- | See 'Katip.katipAddNamespace'.
 withKatipNamespace :: Katip.Namespace -> Benign.Strat a -> a -> a
-withKatipNamespace namespace = Benign.withAltering katipNamespace addNamespace
-  where
-    addNamespace (Just st) = Just $ st <> namespace
-    addNamespace Nothing = error "todo"
+withKatipNamespace namespace = Benign.withAltering katipNamespace (<> Just namespace)
 
 -- | Within this computation, Katip is configured.
 withKatip ::
