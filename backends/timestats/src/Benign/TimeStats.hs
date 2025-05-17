@@ -3,9 +3,10 @@
 module Benign.TimeStats where
 
 import Benign qualified
+import Control.Exception
 import Debug.TimeStats qualified as TimeStats
 import System.IO.Unsafe (unsafePerformIO)
 
-measure :: Benign.Eval a => String -> a -> Benign.Result a
-measure label thing = unsafePerformIO $ TimeStats.measureM label $ Benign.evalIO (Benign.PureEval thing)
+measure :: String -> Benign.Strat a -> a -> a
+measure label strat thing = unsafePerformIO $ TimeStats.measureM label $ do Benign.E <- evaluate (strat thing); return thing
 {-# NOINLINE measure #-}
