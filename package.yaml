@@ -5,7 +5,7 @@ maintainer: arnaud@spiwack.net
 github: aspiwack/haskell-benign
 copyright: MIT
 synopsis: A library for benign effects
-description: see README.md.
+description: See the Benign library.
 
 dependencies:
   - base

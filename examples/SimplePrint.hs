@@ -42,7 +42,7 @@ log log_line = Benign.unsafeSpanBenign do_log (return ())
   where
     do_log :: IO ()
     do_log = do
-      ctx <- Benign.lookupLocalState context
+      ctx <- Benign.lookupLexicalState context
       putStrLn (fromMaybe "" ctx ++ " " ++ log_line)
 
 ------------------------------------------------------------------------------

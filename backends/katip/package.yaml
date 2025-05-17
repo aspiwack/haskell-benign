@@ -4,7 +4,7 @@ author: Arnaud Spiwack
 maintainer: arnaud@spiwack.net
 github: aspiwack/haskell-benign
 copyright: MIT
-synopsis: A library for benign effects
+synopsis: A Benign backend for the Katip library
 description: see README.md.
 
 dependencies:
