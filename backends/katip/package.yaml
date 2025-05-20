@@ -4,11 +4,12 @@ author: Arnaud Spiwack
 maintainer: arnaud@spiwack.net
 github: aspiwack/haskell-benign
 copyright: MIT
+license: MIT
 synopsis: A Benign backend for the Katip library
 description: see README.md.
 
 dependencies:
-  - base
+  - base < 4.22
   - benign
   - katip
 

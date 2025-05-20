@@ -8,7 +8,7 @@ synopsis: A library for benign effects
 description: See the Benign library.
 
 dependencies:
-  - base
+  - base < 4.22
   - async
   - containers
   - deepseq
