@@ -4,7 +4,7 @@ let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
   # ghc924 matches the version from Stack
-  ghcVersion = "924";
+  ghcVersion = "984";
 in
 
 let
